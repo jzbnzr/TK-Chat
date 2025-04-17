@@ -290,7 +290,8 @@
                 }
             }
 
-            ws = new WebSocket(`ws://13.228.225.19:8000/ws/${username}`);
+            //ws = new WebSocket(`ws://13.228.225.19:10000/ws/${username}`);
+            ws = new WebSocket(`wss://${window.location.host}/ws/${username}`);
             ws.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 const messagesDiv = document.getElementById("messages");
