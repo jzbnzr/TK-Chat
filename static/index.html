@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TK Dark Chat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background: #111;
+            margin: 0;
+            color: #0f0;
+            text-shadow: 0 0 5px #0f0;
+        }
+        #chat-container {
+            max-width: 800px;
+            margin: 20px auto;
+            background: #222 url('https://www.transparenttextures.com/patterns/dark-mosaic.png');
+            border: 5px outset #9400d3;
+            box-shadow: 0 0 15px #9400d3;
+        }
+        #banner {
+            width: 700px;
+            height: 500px;
+            background: url('static/banner.png') center/cover no-repeat;
+            border-bottom: 3px solid #000;
+        }
+        #messages {
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 3px inset #555;
+            margin: 10px;
+            color: #0f0;
+        }
+        .message {
+            margin: 8px 0;
+            font-size: 12px;
+            color: #0f0;
+        }
+        .message img.avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            vertical-align: middle;
+            border: 2px solid #9400d3;
+        }
+        .message img.content {
+            max-width: 200px;
+            border: 2px solid #0f0;
+        }
+        input[type="text"], input[type="file"], select {
+            padding: 5px;
+            border: 2px inset #555;
+            background: #333;
+            color: #0f0;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 10px;
+        }
+        #message-input {
+            width: 90%;
+            padding: 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            border: 2px inset #555;
+            background: #333;
+            color: #0f0;
+            font-family: 'Press Start 2P', cursive;
+        }
+        button {
+            padding: 5px 15px;
+            background: linear-gradient(#9400d3, #4b0082);
+            border: 3px outset #9400d3;
+            color: #0f0;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 10px;
+            text-shadow: 1px 1px #000;
+        }
+        button:hover {
+            background: linear-gradient(#4b0082, #9400d3);
+            border: 3px inset #9400d3;
+        }
+        .input-group {
+            margin: 10px;
+            text-align: center;
+        }
+        label {
+            color: #0f0;
+            margin-right: 10px;
+            font-size: 10px;
+        }
+        h2 {
+            color: #9400d3;
+            text-align: center;
+            margin: 10px 0;
+            font-size: 20px;
+            text-shadow: 0 0 5px #9400d3;
+        }
+        marquee {
+            color: #ff00ff;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .online-icon {
+            width: 16px;
+            height: 16px;
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        td {
+            padding: 10px;
+            vertical-align: top;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="banner"></div>
+        <table>
+            <tr>
+                <td colspan="2">
+                    <h2>TK Dark Chat</h2>
+                    <marquee>Welcome to TK Dark Chat! Enter the Neon Void! <img src="https://media.giphy.com/media/3o6UB5R5Qi3jykcLji/giphy.gif" class="online-icon" alt="online"></marquee>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" class="input-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" placeholder="Enter username" />
+                    <label for="avatar">Avatar (Upload or Select):</label>
+                    <input type="file" id="avatar" accept="image/*" />
+                    <select id="predefined-avatar" onchange="setPredefinedAvatar()">
+                        <option value="">Choose a Predefined Avatar</option>
+                        <option value="https://via.placeholder.com/32?text=Skull">Skull</option>
+                        <option value="https://via.placeholder.com/32?text=Ghost">Ghost</option>
+                        <option value="https://via.placeholder.com/32?text=Neon">Neon Star</option>
+                    </select>
+                    <button onclick="joinChat()">Join Chat</button>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <div id="messages"></div>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" class="input-group">
+                    <input type="text" id="message-input" placeholder="Type a message (Enter to send, Shift+Enter for newline)..." />
+                    <input type="file" id="image-input" accept="image/*" />
+                    <button onclick="sendMessage()">Send</button>
+                </td>
+            </tr>
+        </table>
+    </div>
+    <script>
+        let ws = null;
+        let username = null;
+
+        // Request notification permission
+        function requestNotificationPermission() {
+            if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+
+        // Show browser notification
+        function showNotification(sender, content) {
+            if (Notification.permission === "granted" && document.hidden) {
+                new Notification(`New Message from ${sender}`, {
+                    body: content.length > 50 ? content.substring(0, 50) + "..." : content,
+                    icon: "https://via.placeholder.com/32?text=Chat"
+                });
+            }
+        }
+
+        // Handle custom banner upload
+        function setCustomBanner(file) {
+            if (file) {
+                const bannerDiv = document.getElementById("banner");
+                bannerDiv.style.backgroundImage = `url(${URL.createObjectURL(file)})`;
+            }
+        }
+
+        // Handle predefined avatar selection
+        async function setPredefinedAvatar() {
+            const select = document.getElementById("predefined-avatar");
+            const avatarInput = document.getElementById("avatar");
+            if (select.value && username) {
+                const response = await fetch(select.value);
+                const blob = await response.blob();
+                const file = new File([blob], "avatar.png", { type: "image/png" });
+                const formData = new FormData();
+                formData.append("file", file);
+                try {
+                    const uploadResponse = await fetch(`http://127.0.0.1:8000/upload_image?username=${encodeURIComponent(username)}`, {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json"
+                        },
+                        body: formData
+                    });
+                    if (!uploadResponse.ok) {
+                        const errorData = await uploadResponse.json();
+                        let errorMessage = "Unknown error";
+                        if (errorData.detail) {
+                            errorMessage = Array.isArray(errorData.detail) ? errorData.detail.map(err => err.msg).join(", ") : errorData.detail;
+                        }
+                        console.error("Avatar upload failed:", errorData);
+                        alert(`Failed to upload avatar: ${errorMessage}`);
+                        return;
+                    }
+                    avatarInput.value = ""; // Clear file input
+                } catch (error) {
+                    console.error("Error uploading avatar:", error);
+                    alert("Error uploading avatar. Please try again.");
+                }
+            }
+        }
+
+        // Handle banner upload
+        document.addEventListener("DOMContentLoaded", () => {
+            requestNotificationPermission();
+            const bannerInput = document.createElement("input");
+            bannerInput.type = "file";
+            bannerInput.accept = "image/*";
+            bannerInput.style.display = "none";
+            document.body.appendChild(bannerInput);
+            bannerInput.addEventListener("change", () => {
+                if (bannerInput.files.length > 0) {
+                    setCustomBanner(bannerInput.files[0]);
+                }
+            });
+            document.getElementById("banner").addEventListener("click", () => {
+                bannerInput.click();
+            });
+
+            // Enter key handling
+            const messageInput = document.getElementById("message-input");
+            messageInput.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    sendMessage();
+                }
+            });
+        });
+
+        async function joinChat() {
+            username = document.getElementById("username").value.trim();
+            if (!username) {
+                alert("Please enter a username");
+                return;
+            }
+
+            const avatarInput = document.getElementById("avatar");
+            let avatarData = "";
+            if (avatarInput.files.length > 0) {
+                const formData = new FormData();
+                formData.append("file", avatarInput.files[0]);
+                try {
+                    const response = await fetch(`http://127.0.0.1:8000/upload_image?username=${encodeURIComponent(username)}`, {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json"
+                        },
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        let errorMessage = "Unknown error";
+                        if (errorData.detail) {
+                            errorMessage = Array.isArray(errorData.detail) ? errorData.detail.map(err => err.msg).join(", ") : errorData.detail;
+                        }
+                        console.error("Avatar upload failed:", errorData);
+                        alert(`Failed to upload avatar: ${errorMessage}`);
+                        return;
+                    }
+                    const result = await response.json();
+                    avatarData = result.image_url; // Use the returned image_url
+                } catch (error) {
+                    console.error("Error uploading avatar:", error);
+                    alert("Error uploading avatar. Please try again.");
+                    return;
+                }
+            }
+
+            ws = new WebSocket(`ws://localhost:8000/ws/${username}`);
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                const messagesDiv = document.getElementById("messages");
+                const messageDiv = document.createElement("div");
+                messageDiv.className = "message";
+                
+                fetch(`/get_avatar/${data.username}`)
+                    .then(res => res.json())
+                    .then(avatar => {
+                        const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
+                        let content;
+                        if (data.content_type === "image") {
+                            content = `<img class="content" src="${data.content}" />`;
+                            messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
+                        } else {
+                            content = data.content;
+                            messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
+                        }
+                        messagesDiv.appendChild(messageDiv);
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                        showNotification(data.username, content);
+                    });
+            };
+
+            ws.onclose = function() {
+                document.getElementById("messages").innerHTML += '<div>Disconnected from chat</div>';
+            };
+        }
+
+        async function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert("Not connected to chat");
+                return;
+            }
+
+            const messageInput = document.getElementById("message-input");
+            const imageInput = document.getElementById("image-input");
+            const message = messageInput.value.trim();
+
+            if (!username) {
+                alert("Username not set. Please join the chat first.");
+                return;
+            }
+
+            if (message) {
+                const data = {
+                    username: username,
+                    content: message,
+                    content_type: "text",
+                    timestamp: new Date().toISOString()
+                };
+                ws.send(JSON.stringify(data));
+                messageInput.value = "";
+            }
+
+            if (imageInput.files.length > 0) {
+                const file = imageInput.files[0];
+                // Validate file
+                if (!file.type.startsWith("image/")) {
+                    alert("Please select an image file.");
+                    imageInput.value = "";
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) { // Limit to 5MB
+                    alert("File is too large. Maximum size is 5MB.");
+                    imageInput.value = "";
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append("file", file);
+
+                try {
+                    const response = await fetch(`http://127.0.0.1:8000/upload_image?username=${encodeURIComponent(username)}`, {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json"
+                        },
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        // Improved error handling
+                        let errorMessage = "Unknown error";
+                        if (errorData.detail) {
+                            if (Array.isArray(errorData.detail)) {
+                                errorMessage = errorData.detail.map(err => err.msg).join(", ");
+                            } else {
+                                errorMessage = errorData.detail;
+                            }
+                        }
+                        console.error("Upload failed:", errorData);
+                        alert(`Failed to upload image: ${errorMessage}`);
+                        return;
+                    }
+                    const result = await response.json();
+                    const data = {
+                        username: username,
+                        content: result.image_url,
+                        content_type: "image",
+                        timestamp: new Date().toISOString()
+                    };
+                    ws.send(JSON.stringify(data));
+                    imageInput.value = "";
+                } catch (error) {
+                    console.error("Error uploading image:", error);
+                    alert("Error uploading image. Please try again.");
+                }
+            }
+        }
+
+        async function loadMessages() {
+            const response = await fetch("/messages");
+            const messages = await response.json();
+            const messagesDiv = document.getElementById("messages");
+            messages.forEach(async msg => {
+                const messageDiv = document.createElement("div");
+                messageDiv.className = "message";
+                const avatar = await (await fetch(`/get_avatar/${msg.username}`)).json();
+                const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
+                if (msg.content_type === "image") {
+                    messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: <img class="content" src="${msg.content}" /><br><small>${msg.timestamp}</small>`;
+                } else {
+                    messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: ${msg.content}<br><small>${msg.timestamp}</small>`;
+                }
+                messagesDiv.appendChild(messageDiv);
+            });
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        window.onload = loadMessages;
+    </script>
+</body>
+</html>
