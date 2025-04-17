@@ -48,6 +48,43 @@
         .message img.content {
             max-width: 200px;
             border: 2px solid #0f0;
+            cursor: pointer;
+        }
+        .message video.content {
+            max-width: 200px;
+            border: 2px solid #0f0;
+            cursor: pointer;
+        }
+        .message .embed-container {
+            max-width: 400px;
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            overflow: hidden;
+        }
+        .message .embed-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px solid #0f0;
+        }
+        .fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fullscreen img, .fullscreen video {
+            max-width: 90%;
+            max-height: 90%;
         }
         input[type="text"], input[type="file"], select {
             padding: 5px;
@@ -121,7 +158,6 @@
 <body>
     <div id="chat-container">
         <div id="banner"></div>
-        <iframe width="100%" height="300" scrolling="no" frameborder="no" allow="autoplay" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/276452472&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true"></iframe><div style="font-size: 10px; color: #cccccc;line-break: anywhere;word-break: normal;overflow: hidden;white-space: nowrap;text-overflow: ellipsis; font-family: Interstate,Lucida Grande,Lucida Sans Unicode,Lucida Sans,Garuda,Verdana,Tahoma,sans-serif;font-weight: 100;"><a href="https://soundcloud.com/shehriyar-khan-764097850" title="Shehriyar Khan" target="_blank" style="color: #cccccc; text-decoration: none;">Shehriyar Khan</a> · <a href="https://soundcloud.com/shehriyar-khan-764097850/aadatsongoriginal" title="Aadat (Original) By Atif Aslam" target="_blank" style="color: #cccccc; text-decoration: none;">Aadat (Original) By Atif Aslam</a></div>
         <table>
             <tr>
                 <td colspan="2">
@@ -152,7 +188,7 @@
             <tr>
                 <td colspan="2" class="input-group">
                     <input type="text" id="message-input" placeholder="Type a message (Enter to send, Shift+Enter for newline)..." />
-                    <input type="file" id="image-input" accept="image/*" />
+                    <input type="file" id="media-input" accept="image/*,video/*" />
                     <button onclick="sendMessage()">Send</button>
                 </td>
             </tr>
@@ -186,6 +222,37 @@
                 const bannerDiv = document.getElementById("banner");
                 bannerDiv.style.backgroundImage = `url(${URL.createObjectURL(file)})`;
             }
+        }
+
+        // Handle fullscreen zoom for images and videos
+        function toggleFullscreen(element) {
+            if (!document.querySelector(".fullscreen")) {
+                const fullscreenDiv = document.createElement("div");
+                fullscreenDiv.className = "fullscreen";
+                const clonedElement = element.cloneNode(true);
+                if (clonedElement.tagName === "VIDEO") {
+                    clonedElement.controls = true;
+                }
+                fullscreenDiv.appendChild(clonedElement);
+                document.body.appendChild(fullscreenDiv);
+                fullscreenDiv.addEventListener("click", () => {
+                    fullscreenDiv.remove();
+                });
+            }
+        }
+
+        // Extract YouTube video ID
+        function getYouTubeVideoId(url) {
+            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        // Extract Instagram post ID
+        function getInstagramPostId(url) {
+            const regex = /instagram\.com\/p\/([^\/]+)/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
         }
 
         // Handle predefined avatar selection
@@ -268,15 +335,27 @@
                     const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
                     let content;
                     if (data.content_type === "image") {
-                        content = `<img class="content" src="${data.content}" />`;
+                        content = `<img class="content" src="${data.content}" onclick="toggleFullscreen(this)" />`;
+                        messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
+                    } else if (data.content_type === "video") {
+                        content = `<video class="content" src="${data.content}" controls onclick="toggleFullscreen(this)"></video>`;
                         messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
                     } else {
-                        content = data.content;
+                        // Check for YouTube or Instagram links
+                        const youtubeId = getYouTubeVideoId(data.content);
+                        const instagramId = getInstagramPostId(data.content);
+                        if (youtubeId) {
+                            content = `<div class="embed-container"><iframe src="https://www.youtube.com/embed/${youtubeId}" frameborder="0" allowfullscreen></iframe></div>`;
+                        } else if (instagramId) {
+                            content = `<div class="embed-container"><iframe src="https://www.instagram.com/p/${instagramId}/embed" frameborder="0" allowfullscreen></iframe></div>`;
+                        } else {
+                            content = data.content;
+                        }
                         messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
                     }
                     messagesDiv.appendChild(messageDiv);
                     messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                    showNotification(data.username, content);
+                    showNotification(data.username, data.content_type === "text" ? content : `${data.content_type} uploaded`);
                 } catch (error) {
                     console.error("Error fetching avatar:", error);
                 }
@@ -337,7 +416,7 @@
             }
 
             const messageInput = document.getElementById("message-input");
-            const imageInput = document.getElementById("image-input");
+            const mediaInput = document.getElementById("media-input");
             const message = messageInput.value.trim();
 
             if (!username) {
@@ -356,16 +435,19 @@
                 messageInput.value = "";
             }
 
-            if (imageInput.files.length > 0) {
-                const file = imageInput.files[0];
-                if (!file.type.startsWith("image/")) {
-                    alert("Please select an image file.");
-                    imageInput.value = "";
-                    return;
-                }
-                if (file.size > 5 * 1024 * 1024) {
-                    alert("File is too large. Maximum size is 5MB.");
-                    imageInput.value = "";
+            if (mediaInput.files.length > 0) {
+                const file = mediaInput.files[0];
+                let contentType;
+                if (file.type.startsWith("image/")) {
+                    contentType = "image";
+                } else if (file.type.startsWith("video/")) {
+                    contentType = "video";
+                } else if (file.type.startsWith("document/")){
+                    contentType= "document";
+                } 
+                else {
+                    alert("Please select an image or video file.");
+                    mediaInput.value = "";
                     return;
                 }
 
@@ -387,21 +469,21 @@
                             errorMessage = Array.isArray(errorData.detail) ? errorData.detail.map(err => err.msg).join(", ") : errorData.detail;
                         }
                         console.error("Upload failed:", errorData);
-                        alert(`Failed to upload image: ${errorMessage}`);
+                        alert(`Failed to upload media: ${errorMessage}`);
                         return;
                     }
                     const result = await response.json();
                     const data = {
                         username: username,
                         content: result.image_url,
-                        content_type: "image",
+                        content_type: contentType,
                         timestamp: new Date().toISOString()
                     };
                     ws.send(JSON.stringify(data));
-                    imageInput.value = "";
+                    mediaInput.value = "";
                 } catch (error) {
-                    console.error("Error uploading image:", error);
-                    alert("Error uploading image. Please try again.");
+                    console.error("Error uploading media:", error);
+                    alert("Error uploading media. Please try again.");
                 }
             }
         }
@@ -417,11 +499,23 @@
                     const avatarResponse = await fetch(`${backendUrl}/get_avatar/${msg.username}`);
                     const avatar = await avatarResponse.json();
                     const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
+                    let content;
                     if (msg.content_type === "image") {
-                        messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: <img class="content" src="${msg.content}" /><br><small>${msg.timestamp}</small>`;
+                        content = `<img class="content" src="${msg.content}" onclick="toggleFullscreen(this)" />`;
+                    } else if (msg.content_type === "video") {
+                        content = `<video class="content" src="${msg.content}" controls onclick="toggleFullscreen(this)"></video>`;
                     } else {
-                        messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: ${msg.content}<br><small>${msg.timestamp}</small>`;
+                        const youtubeId = getYouTubeVideoId(msg.content);
+                        const instagramId = getInstagramPostId(msg.content);
+                        if (youtubeId) {
+                            content = `<div class="embed-container"><iframe src="https://www.youtube.com/embed/${youtubeId}" frameborder="0" allowfullscreen></iframe></div>`;
+                        } else if (instagramId) {
+                            content = `<div class="embed-container"><iframe src="https://www.instagram.com/p/${instagramId}/embed" frameborder="0" allowfullscreen></iframe></div>`;
+                        } else {
+                            content = msg.content;
+                        }
                     }
+                    messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: ${content}<br><small>${msg.timestamp}</small>`;
                     messagesDiv.appendChild(messageDiv);
                 }
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
