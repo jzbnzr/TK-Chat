@@ -158,10 +158,9 @@
         </table>
     </div>
     <script>
-
-    
         let ws = null;
         let username = null;
+        const backendUrl = `https://${window.location.host}`;
 
         // Request notification permission
         function requestNotificationPermission() {
@@ -199,7 +198,7 @@
                 const formData = new FormData();
                 formData.append("file", file);
                 try {
-                    const uploadResponse = await fetch(`http://127.0.0.1:8000/upload_image?username=${encodeURIComponent(username)}`, {
+                    const uploadResponse = await fetch(`${backendUrl}/upload_image?username=${encodeURIComponent(username)}`, {
                         method: "POST",
                         headers: {
                             "Accept": "application/json"
@@ -251,6 +250,45 @@
             });
         });
 
+        function connectWebSocket() {
+            ws = new WebSocket(`wss://${window.location.host}/ws/${username}`);
+            ws.onopen = () => {
+                console.log("WebSocket connected");
+            };
+            ws.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+                const messagesDiv = document.getElementById("messages");
+                const messageDiv = document.createElement("div");
+                messageDiv.className = "message";
+                
+                try {
+                    const avatarResponse = await fetch(`${backendUrl}/get_avatar/${data.username}`);
+                    const avatar = await avatarResponse.json();
+                    const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
+                    let content;
+                    if (data.content_type === "image") {
+                        content = `<img class="content" src="${data.content}" />`;
+                        messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
+                    } else {
+                        content = data.content;
+                        messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
+                    }
+                    messagesDiv.appendChild(messageDiv);
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    showNotification(data.username, content);
+                } catch (error) {
+                    console.error("Error fetching avatar:", error);
+                }
+            };
+            ws.onclose = () => {
+                console.log("WebSocket disconnected, retrying in 5 seconds...");
+                setTimeout(connectWebSocket, 5000);
+            };
+            ws.onerror = (error) => {
+                console.error("WebSocket error:", error);
+            };
+        }
+
         async function joinChat() {
             username = document.getElementById("username").value.trim();
             if (!username) {
@@ -259,12 +297,11 @@
             }
 
             const avatarInput = document.getElementById("avatar");
-            let avatarData = "";
             if (avatarInput.files.length > 0) {
                 const formData = new FormData();
                 formData.append("file", avatarInput.files[0]);
                 try {
-                    const response = await fetch(`http://127.0.0.1:8000/upload_image?username=${encodeURIComponent(username)}`, {
+                    const response = await fetch(`${backendUrl}/upload_image?username=${encodeURIComponent(username)}`, {
                         method: "POST",
                         headers: {
                             "Accept": "application/json"
@@ -281,8 +318,7 @@
                         alert(`Failed to upload avatar: ${errorMessage}`);
                         return;
                     }
-                    const result = await response.json();
-                    avatarData = result.image_url; // Use the returned image_url
+                    avatarInput.value = ""; // Clear file input
                 } catch (error) {
                     console.error("Error uploading avatar:", error);
                     alert("Error uploading avatar. Please try again.");
@@ -290,35 +326,7 @@
                 }
             }
 
-            //ws = new WebSocket(`ws://13.228.225.19:10000/ws/${username}`);
-            ws = new WebSocket(`wss://${window.location.host}/ws/${username}`);
-            ws.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                const messagesDiv = document.getElementById("messages");
-                const messageDiv = document.createElement("div");
-                messageDiv.className = "message";
-                
-                fetch(`/get_avatar/${data.username}`)
-                    .then(res => res.json())
-                    .then(avatar => {
-                        const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
-                        let content;
-                        if (data.content_type === "image") {
-                            content = `<img class="content" src="${data.content}" />`;
-                            messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
-                        } else {
-                            content = data.content;
-                            messageDiv.innerHTML = `${avatarImg} <strong>${data.username}</strong>: ${content}<br><small>${data.timestamp}</small>`;
-                        }
-                        messagesDiv.appendChild(messageDiv);
-                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                        showNotification(data.username, content);
-                    });
-            };
-
-            ws.onclose = function() {
-                document.getElementById("messages").innerHTML += '<div>Disconnected from chat</div>';
-            };
+            connectWebSocket();
         }
 
         async function sendMessage() {
@@ -349,13 +357,12 @@
 
             if (imageInput.files.length > 0) {
                 const file = imageInput.files[0];
-                // Validate file
                 if (!file.type.startsWith("image/")) {
                     alert("Please select an image file.");
                     imageInput.value = "";
                     return;
                 }
-                if (file.size > 5 * 1024 * 1024) { // Limit to 5MB
+                if (file.size > 5 * 1024 * 1024) {
                     alert("File is too large. Maximum size is 5MB.");
                     imageInput.value = "";
                     return;
@@ -365,7 +372,7 @@
                 formData.append("file", file);
 
                 try {
-                    const response = await fetch(`http://127.0.0.1:8000/upload_image?username=${encodeURIComponent(username)}`, {
+                    const response = await fetch(`${backendUrl}/upload_image?username=${encodeURIComponent(username)}`, {
                         method: "POST",
                         headers: {
                             "Accept": "application/json"
@@ -374,14 +381,9 @@
                     });
                     if (!response.ok) {
                         const errorData = await response.json();
-                        // Improved error handling
                         let errorMessage = "Unknown error";
                         if (errorData.detail) {
-                            if (Array.isArray(errorData.detail)) {
-                                errorMessage = errorData.detail.map(err => err.msg).join(", ");
-                            } else {
-                                errorMessage = errorData.detail;
-                            }
+                            errorMessage = Array.isArray(errorData.detail) ? errorData.detail.map(err => err.msg).join(", ") : errorData.detail;
                         }
                         console.error("Upload failed:", errorData);
                         alert(`Failed to upload image: ${errorMessage}`);
@@ -404,22 +406,27 @@
         }
 
         async function loadMessages() {
-            const response = await fetch("/messages");
-            const messages = await response.json();
-            const messagesDiv = document.getElementById("messages");
-            messages.forEach(async msg => {
-                const messageDiv = document.createElement("div");
-                messageDiv.className = "message";
-                const avatar = await (await fetch(`/get_avatar/${msg.username}`)).json();
-                const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
-                if (msg.content_type === "image") {
-                    messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: <img class="content" src="${msg.content}" /><br><small>${msg.timestamp}</small>`;
-                } else {
-                    messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: ${msg.content}<br><small>${msg.timestamp}</small>`;
+            try {
+                const response = await fetch(`${backendUrl}/messages`);
+                const messages = await response.json();
+                const messagesDiv = document.getElementById("messages");
+                for (const msg of messages) {
+                    const messageDiv = document.createElement("div");
+                    messageDiv.className = "message";
+                    const avatarResponse = await fetch(`${backendUrl}/get_avatar/${msg.username}`);
+                    const avatar = await avatarResponse.json();
+                    const avatarImg = avatar.avatar ? `<img class="avatar" src="data:image/png;base64,${avatar.avatar}" />` : "";
+                    if (msg.content_type === "image") {
+                        messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: <img class="content" src="${msg.content}" /><br><small>${msg.timestamp}</small>`;
+                    } else {
+                        messageDiv.innerHTML = `${avatarImg} <strong>${msg.username}</strong>: ${msg.content}<br><small>${msg.timestamp}</small>`;
+                    }
+                    messagesDiv.appendChild(messageDiv);
                 }
-                messagesDiv.appendChild(messageDiv);
-            });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } catch (error) {
+                console.error("Error loading messages:", error);
+            }
         }
 
         window.onload = loadMessages;
