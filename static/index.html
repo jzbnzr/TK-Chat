@@ -158,6 +158,8 @@
         </table>
     </div>
     <script>
+
+    
         let ws = null;
         let username = null;
 
@@ -288,7 +290,7 @@
                 }
             }
 
-            ws = new WebSocket(`ws://localhost:8000/ws/${username}`);
+            ws = new WebSocket(`ws://13.228.225.19:8000/ws/${username}`);
             ws.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 const messagesDiv = document.getElementById("messages");
