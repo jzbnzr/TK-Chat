@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import sqlite3
 import json
@@ -17,6 +18,16 @@ if not os.path.exists("static"):
 
 # Mount static files directory to serve images
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# Configure CORS to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://tk-chat-g1l6.onrender.com/", "*"],  # Replace with your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize SQLite database
 def init_db():
